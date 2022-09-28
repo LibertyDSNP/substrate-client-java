@@ -23,6 +23,7 @@ import com.strategyobject.substrateclient.tests.containers.SubstrateVersion;
 import com.strategyobject.substrateclient.tests.containers.TestSubstrateContainer;
 import com.strategyobject.substrateclient.transport.ws.WsProvider;
 import lombok.val;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -31,6 +32,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -38,8 +40,7 @@ import java.util.stream.Stream;
 import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.iterableWithSize;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 @Testcontainers
 class BalancesTest {
@@ -55,32 +56,82 @@ class BalancesTest {
         try (val api = Api.with(wsProvider).build().join()) {
             AtomicReference<List<EventRecord>> eventRecords = new AtomicReference<>(new ArrayList<>());
             val unsubscribe = api.pallet(System.class).events()
-                    .subscribe((exception, block, value, keys) -> {
+                    .subscribe((exception, block, _eventRecords, keys) -> {
+                        //Conceptually you would look through the event objects you care about here to find what pertains to you, e.g. for
+                        //msa 		MsaCreated {
+                        //			/// The MSA for the Event
+                        //			msa_id: MessageSourceId,
+                        //			/// The key added to the MSA
+                        //			key: T::AccountId,
+                        //		},
+                        // where the accountId would be the ss58 of the public key that we sent to the server
+                        // I believe the event feed and the submitAndWatchExtrinsic are separate
                         if (exception != null) {
                             throw new RuntimeException(exception);
                         }
 
-                        eventRecords.set(value);
+                        eventRecords.getAndAccumulate(_eventRecords, (onGoingRecords, newRecords) -> {
+                            if(newRecords != null) {
+                                onGoingRecords.addAll(newRecords);
+                            }
+                            return onGoingRecords;
+                        });
                     }, Arg.EMPTY)
                     .join();
 
-            doTransfer(api);
+            val genesis = api.rpc(Chain.class).getBlockHash(BlockNumber.GENESIS).join();
+            val updateCount = new AtomicInteger(0);
+            val status = new AtomicReference<ExtrinsicStatus>();
+            val submitAndWatchUnsubscribe = api.rpc(Author.class).submitAndWatchExtrinsic(createBalanceTransferExtrinsic(genesis), (exception, extrinsicStatus) -> {
+                if(extrinsicStatus.getStatus().equals(ExtrinsicStatus.Status.IN_BLOCK)) { //TODO this is very stupid and a hack to just see what's going on this test may never terminate written this way.
+                    updateCount.incrementAndGet();
+                    status.set(extrinsicStatus);
+                }
+            }).get(WAIT_TIMEOUT, TimeUnit.SECONDS);
 
             await()
-                    .atMost(WAIT_TIMEOUT, TimeUnit.SECONDS)
-                    .untilAtomic(eventRecords, iterableWithSize(greaterThan(1)));
+                    .atMost(WAIT_TIMEOUT * 2, TimeUnit.SECONDS)
+                    .untilAtomic(updateCount, greaterThan(0));
 
+            assertNotNull(status.get());
+            assertTrue(status.get().getStatus().equals(ExtrinsicStatus.Status.IN_BLOCK));
+
+            val result = submitAndWatchUnsubscribe.get().get(WAIT_TIMEOUT, TimeUnit.SECONDS);
+
+            Assertions.assertTrue(result);
+
+            /*await()
+                    .atMost(WAIT_TIMEOUT, TimeUnit.SECONDS)
+                    .untilAtomic(eventRecords, iterableWithSize(greaterThan(1)));*/
+
+            EventRecord[] _eventRecords = eventRecords.get().toArray(new EventRecord[0]);
             assertTrue(unsubscribe.get().join());
             Supplier<Stream<Object>> events = () -> eventRecords.get().stream().map(x -> x.getEvent().getEvent());
+            Object[] _events = events.get().toArray();
+            String foo = "foo";
             assertTrue(events.get().anyMatch(x -> x instanceof Balances.Transfer));
             assertTrue(events.get().anyMatch(x -> x instanceof System.ExtrinsicSuccess));
         }
     }
 
-    private void doTransfer(Api api) {
+    private void doTransfer(Api api) throws Exception {
         val genesis = api.rpc(Chain.class).getBlockHash(BlockNumber.GENESIS).join();
-        assertDoesNotThrow(() ->
-                api.rpc(Author.class).submitExtrinsic(createBalanceTransferExtrinsic(genesis)).join());
+        val updateCount = new AtomicInteger(0);
+        val status = new AtomicReference<ExtrinsicStatus>();
+        val unsubscribe = api.rpc(Author.class).submitAndWatchExtrinsic(createBalanceTransferExtrinsic(genesis), (exception, extrinsicStatus) -> {
+            updateCount.incrementAndGet();
+            status.set(extrinsicStatus);
+        }).get(WAIT_TIMEOUT, TimeUnit.SECONDS);
+
+        await()
+                .atMost(WAIT_TIMEOUT * 2, TimeUnit.SECONDS)
+                .untilAtomic(updateCount, greaterThan(0));
+
+        assertNotNull(status.get());
+
+        val result = unsubscribe.get().get(WAIT_TIMEOUT, TimeUnit.SECONDS);
+
+        Assertions.assertTrue(result);
     }
 
     @SuppressWarnings({"unchecked"})
