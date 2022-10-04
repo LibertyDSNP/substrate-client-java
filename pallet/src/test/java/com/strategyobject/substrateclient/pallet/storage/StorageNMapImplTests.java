@@ -17,7 +17,6 @@ import com.strategyobject.substrateclient.transport.ws.ReconnectionPolicy;
 import com.strategyobject.substrateclient.transport.ws.WsProvider;
 import lombok.NonNull;
 import lombok.val;
-import lombok.var;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
@@ -184,7 +183,7 @@ class StorageNMapImplTests {
 
             assertNotNull(pages);
 
-            var pageCount = 0;
+            int pageCount = 0;
             AtomicInteger total = new AtomicInteger();
             while (pages.moveNext().join()) {
                 pages.current().iterator().forEachRemaining(queryableKey -> total.getAndIncrement());
@@ -210,7 +209,7 @@ class StorageNMapImplTests {
 
             assertNotNull(pages);
 
-            var pageCount = 0;
+            int pageCount = 0;
             val pairs = new ArrayList<Pair<BlockNumber, BlockHash>>();
             while (pages.moveNext().join()) {
                 pages.current()

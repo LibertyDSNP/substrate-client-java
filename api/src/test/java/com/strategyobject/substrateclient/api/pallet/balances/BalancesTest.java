@@ -4,7 +4,7 @@ import com.strategyobject.substrateclient.api.Api;
 import com.strategyobject.substrateclient.api.BalanceTransfer;
 import com.strategyobject.substrateclient.api.TestsHelper;
 import com.strategyobject.substrateclient.api.pallet.system.EventRecord;
-import com.strategyobject.substrateclient.api.pallet.system.System;
+//import com.strategyobject.substrateclient.api.pallet.system.System;
 import com.strategyobject.substrateclient.common.convert.HexConverter;
 import com.strategyobject.substrateclient.common.types.Size;
 import com.strategyobject.substrateclient.crypto.Hasher;
@@ -17,22 +17,24 @@ import com.strategyobject.substrateclient.rpc.api.primitives.BlockNumber;
 import com.strategyobject.substrateclient.rpc.api.primitives.Index;
 import com.strategyobject.substrateclient.rpc.api.section.Author;
 import com.strategyobject.substrateclient.rpc.api.section.Chain;
+import com.strategyobject.substrateclient.rpc.api.section.System;
+import com.strategyobject.substrateclient.rpc.api.ExtrinsicStatus;
 import com.strategyobject.substrateclient.scale.ScaleUtils;
+import com.strategyobject.substrateclient.scale.registries.ScaleWriterRegistry;
 import com.strategyobject.substrateclient.tests.containers.SubstrateVersion;
 import com.strategyobject.substrateclient.tests.containers.TestSubstrateContainer;
 import com.strategyobject.substrateclient.transport.ws.WsProvider;
 import lombok.val;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.startupcheck.StartupCheckStrategy;
 import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.containers.wait.strategy.WaitStrategy;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -49,7 +51,27 @@ class BalancesTest {
     private static final int WAIT_TIMEOUT = 30;
 
     @Container
-    private final TestSubstrateContainer substrate = new TestSubstrateContainer(SubstrateVersion.V3_0_0).waitingFor(Wait.forLogMessage(".*Running JSON-RPC WS server.*", 1));
+    private static final TestSubstrateContainer substrate = new TestSubstrateContainer(SubstrateVersion.V3_0_0).waitingFor(Wait.forLogMessage(".*Running JSON-RPC WS server.*", 1));
+
+
+    private static final BigInteger TIP = BigInteger.valueOf(0);
+
+    private static WsProvider.Builder wsProvider;
+    private static Api api;
+    private static Chain chain;
+    private static System system;
+    private static Author author;
+
+    @BeforeAll
+    static void getApiAndPallets() {
+        wsProvider = WsProvider.builder().setEndpoint(substrate.getWsAddress());
+        api = Api.with(wsProvider).build().join();
+        system = api.rpc(System.class);
+        chain = api.rpc(Chain.class);
+        author = api.rpc(Author.class);
+    }
+
+
 
     @Test
     void transfer() throws Exception {
@@ -57,7 +79,7 @@ class BalancesTest {
 
         try (val api = Api.with(wsProvider).build().join()) {
             AtomicReference<List<EventRecord>> eventRecords = new AtomicReference<>(new ArrayList<>());
-            val unsubscribe = api.pallet(System.class).events()
+            val unsubscribe = api.pallet(com.strategyobject.substrateclient.api.pallet.system.System.class).events()
                     .subscribe((exception, block, value, keys) -> {
                         if (exception != null) {
                             throw new RuntimeException(exception);
@@ -67,30 +89,62 @@ class BalancesTest {
                     }, Arg.EMPTY)
                     .join();
 
-            doTransfer(api);
+            //doTransfer(api);
+            doNewTransfer();
 
             await()
                     .atMost(WAIT_TIMEOUT, TimeUnit.SECONDS)
-                    .untilAtomic(eventRecords, iterableWithSize(greaterThan(1)));
+                    .untilAtomic(eventRecords, iterableWithSize(greaterThan(0)));
 
             assertTrue(unsubscribe.get().join());
             Supplier<Stream<Object>> events = () -> eventRecords.get().stream().map(x -> x.getEvent().getEvent());
             assertTrue(events.get().anyMatch(x -> x instanceof Balances.Transfer));
-            assertTrue(events.get().anyMatch(x -> x instanceof System.ExtrinsicSuccess));
+            assertTrue(events.get().anyMatch(x -> x instanceof com.strategyobject.substrateclient.api.pallet.system.System.ExtrinsicSuccess));
         }
     }
+
+    @Test
+    void newTransfer() throws Exception {
+        AtomicReference<List<ExtrinsicStatus>> extrinsicStatusReference = new AtomicReference<>(new ArrayList<>());
+
+        val aliceKeyRing = KeyRing.fromKeyPair(aliceKeyPair());
+        val bobKeyRing = KeyRing.fromKeyPair(bobKeyPair());
+
+        val createExtrinsic = createTransferExtrinsic(aliceKeyRing, bobKeyRing, BigInteger.valueOf(10));
+
+        createExtrinsic.thenCompose( x -> author.submitAndWatchExtrinsic(x, (exception, extrinsicStatus) -> {
+            if (exception != null)
+                java.lang.System.out.println(exception);
+            else
+                extrinsicStatusReference.get().add(extrinsicStatus);
+        })).join();
+
+        await()
+                .atMost(WAIT_TIMEOUT, TimeUnit.SECONDS)
+                .untilAtomic(extrinsicStatusReference, iterableWithSize(greaterThan(0)));
+
+        java.lang.System.out.println(extrinsicStatusReference);
+    }
+
 
     private void doTransfer(Api api) {
         val genesis = api.rpc(Chain.class).getBlockHash(BlockNumber.GENESIS).join();
         assertDoesNotThrow(() ->
                 api.rpc(Author.class).submitExtrinsic(createBalanceTransferExtrinsic(genesis)).join());
     }
+    
+    private void doNewTransfer() {
+        val aliceKeyRing = KeyRing.fromKeyPair(aliceKeyPair());
+        val bobKeyRing = KeyRing.fromKeyPair(bobKeyPair());
+        val createExtrinsic = createTransferExtrinsic(aliceKeyRing, bobKeyRing, BigInteger.valueOf(10)).join();
+        assertDoesNotThrow(() -> api.rpc(Author.class).submitExtrinsic(createExtrinsic).join());
+    }
 
     private Extrinsic<?, ?, ?, ?> createBalanceTransferExtrinsic(BlockHash genesis) {
-        val specVersion = 264;
-        val txVersion = 2;
-        val moduleIndex = (byte) 6;
-        val callIndex = (byte) 0;
+        val specVersion = 1;
+        val txVersion = 1;
+        val moduleIndex = (byte) 10;
+        val callIndex = (byte) 2;
         val tip = 0;
         val call = new BalanceTransfer(moduleIndex, callIndex, AddressId.fromBytes(bobKeyPair().asPublicKey().getBytes()), BigInteger.valueOf(10));
 
@@ -109,6 +163,45 @@ class BalancesTest {
                         signature,
                         extra
                 ), call);
+    }
+
+    public CompletableFuture<Extrinsic<Call, Address, Signature, SignedExtra<ImmortalEra>>> createTransferExtrinsic(KeyRing fromKeyRing, KeyRing toKeyRing, BigInteger transferAmount) {
+        byte MODULE_INDEX = 10; // authorship pallets from: https://github.com/LibertyDSNP/frequency/blob/main/runtime/frequency/src/lib.rs#L594-L641
+        byte CALL_INDEX = 2; // // Call index obtained from state_getMetaData.
+        long SPEC_VERSION = 1; // Spec version from running state_getRuntimeVersion
+        long TX_VERSION = 1; // Tx version from running state_getRuntimeVersion
+
+        val signerAddressId = AddressId.fromBytes(fromKeyRing.getPublicKey().getBytes());
+        val signerAccountId = signerAddressId.getAddress();
+
+        val destinationAddress = AddressId.fromBytes(toKeyRing.getPublicKey().getBytes());
+
+        val call = new BalanceTransfer(MODULE_INDEX, CALL_INDEX, destinationAddress, transferAmount);
+
+        return getGenesis().thenCombineAsync(getNonce(signerAccountId),
+                (genesis, nonce) -> {
+
+                    val extra = new SignedExtra<>(SPEC_VERSION, TX_VERSION, genesis, genesis, new ImmortalEra(), nonce, TIP);
+                    //val writter = (ScaleWriter<? super SignedPayload<? super CreateSponsoredAccountWithDelegation, ? super SignedExtra<ImmortalEra>>>) registry.resolve(SignedPayload.class);
+                    val signedPayload = ScaleUtils.toBytes(new SignedPayload<>(call, extra), TestsHelper.SCALE_WRITER_REGISTRY, SignedPayload.class);
+
+                    val signature = sign(fromKeyRing, signedPayload);
+
+                    return Extrinsic.createSigned(
+                            new SignaturePayload<>(
+                                    signerAddressId,
+                                    signature,
+                                    extra
+                            ), call);
+                });
+    }
+
+    private CompletableFuture<BlockHash> getGenesis() {
+        return chain.getBlockHash(BlockNumber.GENESIS);
+    }
+
+    private CompletableFuture<Index> getNonce(AccountId accountId) {
+        return system.accountNextIndex(accountId);
     }
 
     private Signature sign(KeyRing keyRing, byte[] payload) {
