@@ -3,6 +3,7 @@ package com.strategyobject.substrateclient.api.pallet.balances;
 import com.strategyobject.substrateclient.api.Api;
 import com.strategyobject.substrateclient.api.BalanceTransfer;
 import com.strategyobject.substrateclient.api.TestsHelper;
+import com.strategyobject.substrateclient.api.pallet.system.AccountInfo;
 import com.strategyobject.substrateclient.api.pallet.system.EventRecord;
 //import com.strategyobject.substrateclient.api.pallet.system.System;
 import com.strategyobject.substrateclient.common.convert.HexConverter;
@@ -43,8 +44,8 @@ import java.util.stream.Stream;
 import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.iterableWithSize;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @Testcontainers
 class BalancesTest {
@@ -104,15 +105,25 @@ class BalancesTest {
     }
 
     @Test
-    void newTransfer() throws Exception {
+    void newTransfer() {
+
+        // Check balance is what we expect before the test
+        val alicePublicKey = HexConverter.toBytes("0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d");
+        AccountInfo aliceBalance = api.pallet(com.strategyobject.substrateclient.api.pallet.system.System.class).account().get(AccountId.fromBytes(alicePublicKey)).join();
+        java.lang.System.out.println("AliceBalance: " + aliceBalance.getData().into(AccountData.class).getFree().toString());
+        assertEquals(
+                new BigInteger("4951760157141521099596496896"),
+                aliceBalance.getData().into(AccountData.class).getFree());
+
+        // Transfer money from alice to bob
         AtomicReference<List<ExtrinsicStatus>> extrinsicStatusReference = new AtomicReference<>(new ArrayList<>());
 
         val aliceKeyRing = KeyRing.fromKeyPair(aliceKeyPair());
         val bobKeyRing = KeyRing.fromKeyPair(bobKeyPair());
 
-        val createExtrinsic = createTransferExtrinsic(aliceKeyRing, bobKeyRing, BigInteger.valueOf(10));
+        val createExtrinsic = createTransferExtrinsic(aliceKeyRing, bobKeyRing, BigInteger.valueOf(1000000000));
 
-        createExtrinsic.thenCompose( x -> author.submitAndWatchExtrinsic(x, (exception, extrinsicStatus) -> {
+        createExtrinsic.thenCompose( extrinsic -> author.submitAndWatchExtrinsic(extrinsic, (exception, extrinsicStatus) -> {
             if (exception != null)
                 java.lang.System.out.println(exception);
             else
@@ -123,7 +134,17 @@ class BalancesTest {
                 .atMost(WAIT_TIMEOUT, TimeUnit.SECONDS)
                 .untilAtomic(extrinsicStatusReference, iterableWithSize(greaterThan(0)));
 
-        java.lang.System.out.println(extrinsicStatusReference);
+
+        java.lang.System.out.println(extrinsicStatusReference.get().get(0).getStatus().toString());
+
+        // Check the balance is now lower
+        aliceBalance = api.pallet(com.strategyobject.substrateclient.api.pallet.system.System.class).account().get(AccountId.fromBytes(alicePublicKey)).join();
+
+        assertNotNull(aliceBalance);
+        java.lang.System.out.println("AliceBalance: " + aliceBalance.getData().into(AccountData.class).getFree().toString());
+        assertNotEquals(
+                new BigInteger("4951760157141521099596496896"),
+                aliceBalance.getData().into(AccountData.class).getFree());
     }
 
 
@@ -167,7 +188,7 @@ class BalancesTest {
 
     public CompletableFuture<Extrinsic<Call, Address, Signature, SignedExtra<ImmortalEra>>> createTransferExtrinsic(KeyRing fromKeyRing, KeyRing toKeyRing, BigInteger transferAmount) {
         byte MODULE_INDEX = 10; // authorship pallets from: https://github.com/LibertyDSNP/frequency/blob/main/runtime/frequency/src/lib.rs#L594-L641
-        byte CALL_INDEX = 2; // // Call index obtained from state_getMetaData.
+        byte CALL_INDEX = 0; // // Call index obtained from state_getMetaData.
         long SPEC_VERSION = 1; // Spec version from running state_getRuntimeVersion
         long TX_VERSION = 1; // Tx version from running state_getRuntimeVersion
 
