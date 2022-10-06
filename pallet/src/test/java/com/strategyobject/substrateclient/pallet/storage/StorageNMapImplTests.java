@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Testcontainers
 class StorageNMapImplTests {
-    private static final int CONNECTION_TIMEOUT = 1000;
+    private static final int CONNECTION_TIMEOUT = 30;
     private static final int WAIT_TIMEOUT = 10;
     @Container
     private final TestSubstrateContainer substrate = new TestSubstrateContainer(SubstrateVersion.V3_0_0).waitingFor(Wait.forLogMessage(".*Running JSON-RPC WS server.*", 1));

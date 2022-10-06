@@ -133,9 +133,9 @@ class AuthorTests {
     }
 
     private Extrinsic<?, ?, ?, ?> createBalanceTransferExtrinsic(BlockHash genesis, int nonce) {
-        val specVersion = 264;
-        val txVersion = 2;
-        val moduleIndex = (byte) 6;
+        val specVersion = 1;
+        val txVersion = 1;
+        val moduleIndex = (byte) 10;
         val callIndex = (byte) 0;
         val tip = 0;
         val call = new BalanceTransfer(moduleIndex, callIndex, AddressId.fromBytes(bobKeyPair().asPublicKey().getBytes()), BigInteger.valueOf(10));

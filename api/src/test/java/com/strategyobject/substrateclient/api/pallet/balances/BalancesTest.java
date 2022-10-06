@@ -58,7 +58,6 @@ class BalancesTest {
         val wsProvider = WsProvider.builder().setEndpoint(substrate.getWsAddress());
 
         try (val api = Api.with(wsProvider).build().join()) {
-            /* TODO update these with new metadata for pallets and events and also figure out storage event EOF
             AtomicReference<List<EventRecord>> eventRecords = new AtomicReference<>(new ArrayList<>());
             val unsubscribe = api.pallet(System.class).events()
                     .subscribe((exception, block, value, keys) -> {
@@ -68,11 +67,11 @@ class BalancesTest {
 
                         eventRecords.set(value);
                     }, Arg.EMPTY)
-                    .join();*/
+                    .join();
 
             doTransfer(api);
 
-            /*
+
             await()
                     .atMost(WAIT_TIMEOUT, TimeUnit.SECONDS)
                     .untilAtomic(eventRecords, iterableWithSize(greaterThan(1)));
@@ -81,7 +80,7 @@ class BalancesTest {
             assertTrue(events.get().anyMatch(x -> x instanceof Balances.Transfer));
             assertTrue(events.get().anyMatch(x -> x instanceof System.ExtrinsicSuccess));
 
-             */
+
         }
     }
 
