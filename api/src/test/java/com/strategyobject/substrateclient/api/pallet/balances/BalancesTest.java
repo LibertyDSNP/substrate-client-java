@@ -121,7 +121,9 @@ class BalancesTest {
         val aliceKeyRing = KeyRing.fromKeyPair(aliceKeyPair());
         val bobKeyRing = KeyRing.fromKeyPair(bobKeyPair());
 
-        val createExtrinsic = createTransferExtrinsic(aliceKeyRing, bobKeyRing, BigInteger.valueOf(1000000000));
+
+        val transferAmount = "1000000000000000000000000";
+        val createExtrinsic = createTransferExtrinsic(aliceKeyRing, bobKeyRing, new BigInteger(transferAmount));
 
         createExtrinsic.thenCompose( extrinsic -> author.submitAndWatchExtrinsic(extrinsic, (exception, extrinsicStatus) -> {
             if (exception != null)
@@ -132,7 +134,7 @@ class BalancesTest {
 
         await()
                 .atMost(WAIT_TIMEOUT, TimeUnit.SECONDS)
-                .untilAtomic(extrinsicStatusReference, iterableWithSize(greaterThan(0)));
+                .untilAtomic(extrinsicStatusReference, iterableWithSize(greaterThan(1)));
 
 
         java.lang.System.out.println(extrinsicStatusReference.get().get(0).getStatus().toString());
