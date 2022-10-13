@@ -1,5 +1,6 @@
 package com.strategyobject.substrateclient.api.pallet.msa;
 
+import com.google.common.collect.Lists;
 import com.strategyobject.substrateclient.api.Api;
 import com.strategyobject.substrateclient.api.CreateMsa;
 import com.strategyobject.substrateclient.api.TestsHelper;
@@ -40,8 +41,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.awaitility.Awaitility.await;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.iterableWithSize;
+import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -64,15 +64,21 @@ public class CreateMsaTest {
                         if (exception != null) {
                             throw new RuntimeException(exception);
                         }
-
-                        eventRecords.set(value);
+                        EventRecord foundEventRecord;
+                        if(value != null) {
+                            for (EventRecord er : value) {
+                                if (er.getEvent().getEvent() instanceof Msa.MsaCreated) {
+                                    eventRecords.set(Lists.newArrayList(er));
+                                }
+                            }
+                        }
                     }, Arg.EMPTY)
                     .join();
 
             doCreateMsa(api);
             await()
                     .atMost(WAIT_TIMEOUT, TimeUnit.SECONDS)
-                    .untilAtomic(eventRecords, iterableWithSize(greaterThan(1)));
+                    .untilAtomic(eventRecords, iterableWithSize(equalTo(1)));
             assertTrue(unsubscribe.get().join());
             Supplier<Stream<Object>> events = () -> eventRecords.get().stream().map(x -> x.getEvent().getEvent());
 
@@ -85,7 +91,6 @@ public class CreateMsaTest {
                     break;
                 }
             }
-            assertTrue(events.get().anyMatch(x -> x instanceof System.ExtrinsicSuccess));
 
             Msa msaPallet = api.pallet(Msa.class);
             AccountId aliceAccountId = AccountId.fromBytes(aliceKeyPair().asPublicKey().getBytes());
