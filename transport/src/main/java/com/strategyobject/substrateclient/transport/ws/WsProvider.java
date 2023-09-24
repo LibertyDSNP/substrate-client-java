@@ -13,6 +13,7 @@ import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.framing.CloseFrame;
+import org.slf4j.MDC;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -46,6 +47,7 @@ class WsStateAwaiting {
     private String method;
     private List<Object> params;
     private SubscriptionHandler subscription;
+    private Map<String, String> mdc;
 }
 
 @Slf4j
@@ -235,7 +237,7 @@ public class WsProvider implements ProviderInterface, AutoCloseable {
         log.debug("Calling {} {}, {}, {}, {}", id, method, params, json, subscription);
 
         val whenResponseReceived = new CompletableFuture<RpcObject>();
-        this.handlers.put(id, new WsStateAwaiting(whenResponseReceived, method, params, subscription));
+        this.handlers.put(id, new WsStateAwaiting(whenResponseReceived, method, params, subscription, MDC.getCopyOfContextMap()));
 
         return CompletableFuture.runAsync(() -> ws.send(json), webSocketSendExecutorService)
                 .whenCompleteAsync((_res, ex) -> {
@@ -434,6 +436,7 @@ public class WsProvider implements ProviderInterface, AutoCloseable {
         }
 
         try {
+            MDC.setContextMap(handler.getMdc());
             val result = response.getResult();
             // first send the result - in case of subs, we may have an update
             // immediately if we have some queued results already
@@ -458,6 +461,8 @@ public class WsProvider implements ProviderInterface, AutoCloseable {
             }
         } catch (Exception ex) {
             handler.getCallback().completeExceptionally(ex);
+        }finally{
+            MDC.clear();
         }
 
         this.handlers.remove(id);
