@@ -76,12 +76,14 @@ public class WsProvider implements ProviderInterface, AutoCloseable {
     private volatile ProviderStatus status = ProviderStatus.DISCONNECTED;
     private final ScheduledExecutorService reconnector = Executors.newSingleThreadScheduledExecutor();
     private final ScheduledExecutorService timedOutHandlerCleaner = Executors.newScheduledThreadPool(1);
+    private final ExecutorService webSocketSendExecutorService;
 
     WsProvider(@NonNull URI endpoint,
                Map<String, String> headers,
                int heartbeatInterval,
                long responseTimeoutInMs,
-               @NonNull ReconnectionPolicy reconnectionPolicy) {
+               @NonNull ReconnectionPolicy reconnectionPolicy,
+               ExecutorService webSocketSendExecutorService) {
         Preconditions.checkArgument(
                 endpoint.getScheme().matches("(?i)ws|wss"),
                 "Endpoint should start with 'ws://', received " + endpoint);
@@ -92,6 +94,7 @@ public class WsProvider implements ProviderInterface, AutoCloseable {
         this.responseTimeoutInMs = responseTimeoutInMs;
         this.reconnectionPolicy = reconnectionPolicy;
         this.reconnectionPolicyContext.set(reconnectionPolicy.initState());
+        this.webSocketSendExecutorService = webSocketSendExecutorService;
     }
 
     public static Builder builder() {
@@ -234,7 +237,7 @@ public class WsProvider implements ProviderInterface, AutoCloseable {
         val whenResponseReceived = new CompletableFuture<RpcObject>();
         this.handlers.put(id, new WsStateAwaiting(whenResponseReceived, method, params, subscription));
 
-        return CompletableFuture.runAsync(() -> ws.send(json))
+        return CompletableFuture.runAsync(() -> ws.send(json), webSocketSendExecutorService)
                 .whenCompleteAsync((_res, ex) -> {
                     if (ex != null) {
                         this.handlers.remove(id);
@@ -551,6 +554,8 @@ public class WsProvider implements ProviderInterface, AutoCloseable {
         private long responseTimeoutInMs = 20000;
         private ReconnectionPolicy reconnectionPolicy;
 
+        private ExecutorService webSocketSendExecutorService;
+
         Builder() {
             try {
                 endpoint = new URI(DEFAULT_URI);
@@ -597,6 +602,10 @@ public class WsProvider implements ProviderInterface, AutoCloseable {
             return this;
         }
 
+        public void setWebSocketSendExecutorService(ExecutorService webSocketSendExecutorService) {
+            this.webSocketSendExecutorService = webSocketSendExecutorService;
+        }
+
         public WsProvider build() {
             return new WsProvider(this.endpoint,
                     this.headers,
@@ -604,7 +613,8 @@ public class WsProvider implements ProviderInterface, AutoCloseable {
                     this.responseTimeoutInMs,
                     this.reconnectionPolicy == null ?
                             ExponentialBackoffReconnectionPolicy.builder().build() :
-                            this.reconnectionPolicy);
+                            this.reconnectionPolicy,
+                webSocketSendExecutorService == null ? ForkJoinPool.commonPool() : webSocketSendExecutorService);
         }
 
         @Override
