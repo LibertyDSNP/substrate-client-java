@@ -602,8 +602,9 @@ public class WsProvider implements ProviderInterface, AutoCloseable {
             return this;
         }
 
-        public void setWebSocketSendExecutorService(ExecutorService webSocketSendExecutorService) {
+        public Builder setWebSocketSendExecutorService(ExecutorService webSocketSendExecutorService) {
             this.webSocketSendExecutorService = webSocketSendExecutorService;
+            return this;
         }
 
         public WsProvider build() {
