@@ -295,6 +295,7 @@ public class WsProvider implements ProviderInterface, AutoCloseable {
      */
     @Override
     public CompletableFuture<Boolean> unsubscribe(String type, String method, String id) {
+        log.info("[unsubscribe] Unsubscribing for type={}, method={}, id={}", type, method, id);
         val subscription = type + "::" + id;
         val whenUnsubscribed = new CompletableFuture<Boolean>();
 
@@ -303,12 +304,14 @@ public class WsProvider implements ProviderInterface, AutoCloseable {
         // a slight complication in solving - since we cannot rely on the sent id, but rather
         // need to find the actual subscription id to map it
         if (this.subscriptions.get(subscription) == null) {
-            log.info("Unable to find active subscription={}", subscription);
+            log.info("[unsubscribe] Unable to find active subscription={}", subscription);
 
             whenUnsubscribed.complete(false);
         } else {
+            log.info("[unsubscribe] Found active subscription={}", subscription);
             this.subscriptions.remove(subscription);
             if (this.isConnected() && this.webSocket != null) {
+                log.info("[unsubscribe] Submitting method={}, id={}", method, id);
                 return this.send(method, Collections.singletonList(id), null)
                         .thenApplyAsync(RpcObject::asBoolean);
             }
