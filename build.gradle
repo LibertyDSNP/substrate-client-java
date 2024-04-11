@@ -7,7 +7,7 @@ plugins {
 
 allprojects {
     group = 'com.strategyobject.substrateclient'
-    version = '0.2.5.5-SNAPSHOT'
+    version = '0.2.5.4'
 
     repositories {
         mavenLocal()
@@ -54,7 +54,7 @@ subprojects {
         repositories {
             maven {
                 name = "GitHubPackages"
-                url = "https://maven.pkg.github.com/LibertyDSNP/substrate-client-java"
+                url = "https://maven.pkg.github.com/AmplicaLabs/substrate-client-java"
                 credentials {
                     username = System.getenv("USERNAME")
                     password = System.getenv("TOKEN")
