@@ -78,12 +78,17 @@ class BalancesTest {
     private void doTransfer(Api api) {
         val genesis = api.rpc(Chain.class).getBlockHash(BlockNumber.GENESIS).join();
         AtomicReference<ExtrinsicStatus.Status> statusAtomicReference = new AtomicReference<>();
-        assertDoesNotThrow(() ->
+        assertDoesNotThrow(() ->{
+            try{
                 api.rpc(Author.class).submitAndWatchExtrinsic(createBalanceTransferExtrinsic(genesis), (x, status) -> {
                     if(status.getStatus().equals(ExtrinsicStatus.Status.IN_BLOCK)){
                         statusAtomicReference.set(status.getStatus());
                     }
-                }).join());
+                }).join();
+            }catch(Exception e){
+                throw new RuntimeException(e);
+            }
+        });
         await()
                 .atMost(WAIT_TIMEOUT, TimeUnit.SECONDS)
                 .untilAtomic(statusAtomicReference, Matchers.equalTo(ExtrinsicStatus.Status.IN_BLOCK));

@@ -128,8 +128,8 @@ class AuthorTests {
 {"jsonrpc":"2.0","result":false,"id":35}
                 as of 1.1.0 the unwatchExtrinsic returns false, changing the assertion so (assuming they do) fix it we can change it back
             */
-            //Assertions.assertTrue(result);
-            Assertions.assertFalse(result);
+            Assertions.assertTrue(result);
+            //Assertions.assertFalse(result);
         }
     }
 

@@ -6,7 +6,7 @@ import org.testcontainers.containers.GenericContainer;
  * We are using our Frequency node for the Substrate container as Substrate is no longer versioned well
  */
 public class TestSubstrateContainer extends GenericContainer<TestSubstrateContainer> {
-    private static final String IMAGE = "frequencychain/instant-seal-node:";
+    private static final String IMAGE = "frequencychain/standalone-node:";
 
     public TestSubstrateContainer(String version) {
         super(IMAGE + version);
